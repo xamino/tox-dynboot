@@ -10,8 +10,8 @@ import (
 
 const toxWikiNodesURL = "https://wiki.tox.im/Nodes"
 
-// Strap is a single possible node candidate.
-type Strap struct {
+// ToxNode is a single possible node candidate.
+type ToxNode struct {
 	IPv4 string
 	IPv6 string
 	Port uint16
@@ -23,7 +23,7 @@ type Strap struct {
 }
 
 // Fetch the possible bootstrap nodes from the wiki. Requires active internet!
-func Fetch() (*[]Strap, error) {
+func Fetch() (*[]ToxNode, error) {
 	response, err := http.Get(toxWikiNodesURL)
 	if err != nil {
 		return nil, err
@@ -51,12 +51,12 @@ func Fetch() (*[]Strap, error) {
 	// determine how many iterations we'll have to do
 	amount := len(list) / 7
 	// list of objects
-	var nodes []Strap
+	var nodes []ToxNode
 	// now build Straps from the elements
 	for i := 0; i < amount; i++ {
 		index := i * 7
 		// most we can directly assign
-		object := Strap{IPv4: list[index], IPv6: list[index+1], ID: list[index+3], Locale: list[index+5], Name: list[index+4]}
+		object := ToxNode{IPv4: list[index], IPv6: list[index+1], ID: list[index+3], Locale: list[index+5], Name: list[index+4]}
 		// port needs to converted first
 		temp, err := strconv.ParseInt(list[index+2], 10, 32)
 		if err != nil {
