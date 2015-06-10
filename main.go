@@ -97,7 +97,7 @@ func FetchAll() (*[]ToxNode, error) {
 	amount := len(list) / 7
 	// list of objects
 	var nodes []ToxNode
-	// now build Straps from the elements
+	// now build ToxNodes from the elements
 	for i := 0; i < amount; i++ {
 		index := i * 7
 		// most we can directly assign
@@ -197,7 +197,8 @@ func FetchAlive(timeout time.Duration) (*[]ToxNode, error) {
 
 /*
 FetchAnyAlive will retrive a random node of those that have been determined to be alive
-within the given timeout.
+within the given timeout. NOTE: Usually you should use FetchFirstAlive() instead of this
+function.
 */
 func FetchAnyAlive(timeout time.Duration) (*ToxNode, error) {
 	nodesTemp, err := FetchAlive(timeout)
