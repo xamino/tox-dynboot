@@ -1,3 +1,8 @@
+/*
+Package toxdynboot requests the Node list from the Tox wiki and provides helpful
+functionality for them. Fastest and best way to use this package is via the
+FetchFirstAlive() function.
+*/
 package toxdynboot
 
 import (
@@ -13,6 +18,7 @@ import (
 	"time"
 )
 
+// toxWikiNodesURL is the address where we look for the node list.
 const toxWikiNodesURL = "https://wiki.tox.im/Nodes"
 
 // ToxNode is a single possible node candidate.
@@ -167,6 +173,7 @@ func FetchAnyAlive(timeout time.Duration) (*ToxNode, error) {
 
 // IsAlive checks whether the given ToxNode is reachable. NOTE: this relies on nodes refusing connections - if they are online but quietly discard connection attempts, this function will wrongly label them as unreachable.
 func IsAlive(node *ToxNode, timeout time.Duration) bool {
+	// TODO: use both IPv4 AND IPv6.
 	address := node.IPv4 + ":" + strconv.FormatUint(uint64(node.Port), 10)
 	// since ICMP ping is not trivially available we rely on the servers denying TCP connections as a ping
 	conn, err := net.DialTimeout("tcp", address, timeout)
