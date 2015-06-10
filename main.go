@@ -33,7 +33,41 @@ type ToxNode struct {
 	Status bool
 }
 
-// FetchAll the possible bootstrap nodes from the wiki. Requires active internet!
+/*
+FetchFirstAlive will return the first node that we determine to be available. The timeout
+is the max time: if reached the function will return an error.
+*/
+func FetchFirstAlive(timeout time.Duration) (*ToxNode, error) {
+	// we'll only check those marked as active
+	nodes, err := FetchUp()
+	start := time.Now()
+	if err != nil {
+		return nil, err
+	}
+	c := make(chan *ToxNode)
+	for _, node := range *nodes {
+		// concurrently do this because it locks.
+		go func(node ToxNode) {
+			if IsAlive(&node, timeout) {
+				c <- &node
+			} else {
+				c <- nil
+			}
+		}(node)
+		// warning: don't use node directly in the anonymous function because it changes on every iteration!
+	}
+	candidate := <-c
+	if candidate != nil {
+		elapsed := time.Since(start)
+		log.Printf("First in %v", elapsed)
+		return candidate, nil
+	}
+	return nil, errors.New("No ToxNode could be reached!")
+}
+
+/*
+FetchAll the possible bootstrap nodes from the wiki. Requires active internet!
+*/
 func FetchAll() (*[]ToxNode, error) {
 	response, err := http.Get(toxWikiNodesURL)
 	if err != nil {
@@ -90,7 +124,9 @@ func FetchAll() (*[]ToxNode, error) {
 	return &nodes, nil
 }
 
-// FetchUp returns all nodes that are marked as being online in the wiki.
+/*
+FetchUp returns all nodes that are marked as being online in the wiki.
+*/
 func FetchUp() (*[]ToxNode, error) {
 	nodes, err := FetchAll()
 	if err != nil {
@@ -105,7 +141,9 @@ func FetchUp() (*[]ToxNode, error) {
 	return &upNodes, nil
 }
 
-// FetchAny returns a random single node with the status of UP from the wiki.
+/*
+FetchAny returns a random single node with the status of UP from the wiki.
+*/
 func FetchAny() (*ToxNode, error) {
 	nodesTemp, err := FetchUp()
 	if err != nil {
@@ -123,7 +161,11 @@ func FetchAny() (*ToxNode, error) {
 	return &node, nil
 }
 
-// FetchAlive fetches all nodes from the wiki and then checks whether they are actively reachable and only returns those. Note that this means that this function will block for the specified time!
+/*
+FetchAlive fetches all nodes from the wiki and then checks whether they are actively
+reachable and only returns those. Note that this means that this function will block for
+the specified time!
+*/
 func FetchAlive(timeout time.Duration) (*[]ToxNode, error) {
 	// we'll only check those marked as active
 	nodes, err := FetchUp()
@@ -153,7 +195,10 @@ func FetchAlive(timeout time.Duration) (*[]ToxNode, error) {
 	return &aliveNodes, nil
 }
 
-// FetchAnyAlive will retrive a random node of those that have been determined to be alive within the given timeout.
+/*
+FetchAnyAlive will retrive a random node of those that have been determined to be alive
+within the given timeout.
+*/
 func FetchAnyAlive(timeout time.Duration) (*ToxNode, error) {
 	nodesTemp, err := FetchAlive(timeout)
 	if err != nil {
@@ -171,7 +216,12 @@ func FetchAnyAlive(timeout time.Duration) (*ToxNode, error) {
 	return &node, nil
 }
 
-// IsAlive checks whether the given ToxNode is reachable. NOTE: this relies on nodes refusing connections - if they are online but quietly discard connection attempts, this function will wrongly label them as unreachable.
+/*
+IsAlive checks whether the given ToxNode is reachable. NOTE: this relies on nodes refusing
+connections - if they are online but quietly discard connection attempts, this function
+will wrongly label them as unreachable (which is the case for a few of the current nodes
+as of 2015.06.10).
+*/
 func IsAlive(node *ToxNode, timeout time.Duration) bool {
 	// TODO: use both IPv4 AND IPv6.
 	address := node.IPv4 + ":" + strconv.FormatUint(uint64(node.Port), 10)
@@ -187,33 +237,4 @@ func IsAlive(node *ToxNode, timeout time.Duration) bool {
 		conn.Close()
 	}
 	return true
-}
-
-// FetchFirstAlive will return the first node that we determine to be available. The timeout is the max time: if reached the function will return an error.
-func FetchFirstAlive(timeout time.Duration) (*ToxNode, error) {
-	// we'll only check those marked as active
-	nodes, err := FetchUp()
-	start := time.Now()
-	if err != nil {
-		return nil, err
-	}
-	c := make(chan *ToxNode)
-	for _, node := range *nodes {
-		// concurrently do this because it locks.
-		go func(node ToxNode) {
-			if IsAlive(&node, timeout) {
-				c <- &node
-			} else {
-				c <- nil
-			}
-		}(node)
-		// warning: don't use node directly in the anonymous function because it changes on every iteration!
-	}
-	candidate := <-c
-	if candidate != nil {
-		elapsed := time.Since(start)
-		log.Printf("First in %v", elapsed)
-		return candidate, nil
-	}
-	return nil, errors.New("No ToxNode could be reached!")
 }
