@@ -9,7 +9,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"io/ioutil"
-	"log"
 	"math/rand"
 	"net"
 	"net/http"
@@ -40,7 +39,6 @@ is the max time: if reached the function will return an error.
 func FetchFirstAlive(timeout time.Duration) (*ToxNode, error) {
 	// we'll only check those marked as active
 	nodes, err := FetchUp()
-	start := time.Now()
 	if err != nil {
 		return nil, err
 	}
@@ -58,8 +56,6 @@ func FetchFirstAlive(timeout time.Duration) (*ToxNode, error) {
 	}
 	candidate := <-c
 	if candidate != nil {
-		elapsed := time.Since(start)
-		log.Printf("First in %v", elapsed)
 		return candidate, nil
 	}
 	return nil, errors.New("No ToxNode could be reached!")
