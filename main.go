@@ -4,7 +4,9 @@ import (
 	"encoding/hex"
 	"errors"
 	"io/ioutil"
+	"log"
 	"math/rand"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -103,10 +105,108 @@ func FetchAny() (*ToxNode, error) {
 	if err != nil {
 		return nil, err
 	}
+	// shortcut
+	if len(*nodesTemp) == 0 {
+		return nil, nil
+	}
 	nodes := *nodesTemp
 	// random seed based on time (doesn't need to be cryptographically secure)
 	rand.Seed(time.Now().UnixNano())
 	// pick one random
 	node := nodes[rand.Intn(len(nodes))]
 	return &node, nil
+}
+
+// FetchAlive fetches all nodes from the wiki and then checks whether they are actively reachable and only returns those. Note that this means that this function will block for the specified time!
+func FetchAlive(timeout time.Duration) (*[]ToxNode, error) {
+	// we'll only check those marked as active
+	nodes, err := FetchUp()
+	if err != nil {
+		return nil, err
+	}
+	c := make(chan *ToxNode)
+	for _, node := range *nodes {
+		// concurrently do this because it locks.
+		go func(node ToxNode) {
+			if IsAlive(&node, timeout) {
+				c <- &node
+			} else {
+				c <- nil
+			}
+		}(node)
+		// warning: don't use node directly in the anonymous function because it changes on every iteration!
+	}
+	var aliveNodes []ToxNode
+	for i := 0; i < len(*nodes); i++ {
+		candidate := <-c
+		if candidate != nil {
+			aliveNodes = append(aliveNodes, *candidate)
+		}
+	}
+	// log.Printf("Of %2d nodes %2d are alive.", len(*nodes), len(aliveNodes))
+	return &aliveNodes, nil
+}
+
+// FetchAnyAlive will retrive a random node of those that have been determined to be alive within the given timeout.
+func FetchAnyAlive(timeout time.Duration) (*ToxNode, error) {
+	nodesTemp, err := FetchAlive(timeout)
+	if err != nil {
+		return nil, err
+	}
+	// shortcut
+	if len(*nodesTemp) == 0 {
+		return nil, nil
+	}
+	nodes := *nodesTemp
+	// random seed based on time (doesn't need to be cryptographically secure)
+	rand.Seed(time.Now().UnixNano())
+	// pick one random
+	node := nodes[rand.Intn(len(nodes))]
+	return &node, nil
+}
+
+// IsAlive checks whether the given ToxNode is reachable. NOTE: this relies on nodes refusing connections - if they are online but quietly discard connection attempts, this function will wrongly label them as unreachable.
+func IsAlive(node *ToxNode, timeout time.Duration) bool {
+	address := node.IPv4 + ":" + strconv.FormatUint(uint64(node.Port), 10)
+	// since ICMP ping is not trivially available we rely on the servers denying TCP connections as a ping
+	conn, err := net.DialTimeout("tcp", address, timeout)
+	// if err but not 'connection refused' --> unreachable for ping
+	if err != nil && !strings.Contains(err.Error(), "connection refused") {
+		// log.Printf("Node %s is unreachable!", node.IPv4)
+		return false
+	} // else if conn ok or conn refused --> alive
+	// if conn happened make sure to close it as we don't need it
+	if conn != nil {
+		conn.Close()
+	}
+	return true
+}
+
+// FetchFirstAlive will return the first node that we determine to be available. The timeout is the max time: if reached the function will return an error.
+func FetchFirstAlive(timeout time.Duration) (*ToxNode, error) {
+	// we'll only check those marked as active
+	nodes, err := FetchUp()
+	start := time.Now()
+	if err != nil {
+		return nil, err
+	}
+	c := make(chan *ToxNode)
+	for _, node := range *nodes {
+		// concurrently do this because it locks.
+		go func(node ToxNode) {
+			if IsAlive(&node, timeout) {
+				c <- &node
+			} else {
+				c <- nil
+			}
+		}(node)
+		// warning: don't use node directly in the anonymous function because it changes on every iteration!
+	}
+	candidate := <-c
+	if candidate != nil {
+		elapsed := time.Since(start)
+		log.Printf("First in %v", elapsed)
+		return candidate, nil
+	}
+	return nil, errors.New("No ToxNode could be reached!")
 }
