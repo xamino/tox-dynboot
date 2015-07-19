@@ -1,5 +1,10 @@
 # tox-dynboot
 Go package that fetches the bootstrap nodes from the [Tox wiki](https://wiki.tox.im/Nodes) to use with a Golang wrapped Toxcore.
+Import as shown:
+
+```go
+import "github.com/xamino/tox-dynboot"
+```
 
 ## Usage
 The basic case is that we want any single working node.
