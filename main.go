@@ -18,7 +18,7 @@ import (
 )
 
 // toxWikiNodesURL is the address where we look for the node list.
-const toxWikiNodesURL = "https://wiki.tox.im/Nodes"
+const toxWikiNodesURL = "https://wiki.tox.chat/users/nodes"
 
 // ToxNode is a single possible node candidate.
 type ToxNode struct {
@@ -32,6 +32,10 @@ type ToxNode struct {
 	Status bool
 }
 
+func (t *ToxNode) String() string {
+	return "ToxNode " + t.Name + " at " + t.IPv4 + ":" + strconv.FormatInt(int64(t.Port), 10) + "."
+}
+
 /*
 FetchFirstAlive will return the first node that we determine to be available. The timeout
 is the max time: if reached the function will return an error.
@@ -41,6 +45,10 @@ func FetchFirstAlive(timeout time.Duration) (*ToxNode, error) {
 	nodes, err := FetchUp()
 	if err != nil {
 		return nil, err
+	}
+	// prevent freezing if no nodes were fetched
+	if len(*nodes) == 0 {
+		return nil, errors.New("no nodes could be fetched from URL")
 	}
 	c := make(chan *ToxNode)
 	for _, node := range *nodes {
@@ -74,12 +82,23 @@ func FetchAll() (*[]ToxNode, error) {
 	if err != nil {
 		return nil, err
 	}
+	// locate only the table we are interested in
+	trimmed := strings.Split(string(contents), "id=\"active_nodes_list\"")[1]
+	trimmed = strings.Split(trimmed, "id=\"running_a_node\"")[0]
 	// remove stuff before first <td> and split rest up
-	candidates := strings.Split(string(contents), "<td>")[1:]
+	candidates := strings.Split(trimmed, "<td")[1:]
+	// if we have no candidates we're done, probabaly formatting error
+	if len(candidates) == 0 {
+		return nil, errors.New("parsing of wiki table failed")
+	}
 	var list []string
 	for _, element := range candidates {
+		// clean up leading stuff
+		element = strings.Split(element, ">")[1]
 		// clean up anything outside the </td>
-		element = strings.Split(element, "</td>")[0]
+		element = strings.Split(element, "</td")[0]
+		// remove whitespace
+		element = strings.TrimSpace(element)
 		// remove any trailing newlines
 		element = strings.Trim(element, "\n")
 		// now each element is a single value
