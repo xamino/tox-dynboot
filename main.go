@@ -47,11 +47,11 @@ func FetchFirstAlive(timeout time.Duration) (*ToxNode, error) {
 		return nil, err
 	}
 	// prevent freezing if no nodes were fetched
-	if len(*nodes) == 0 {
+	if len(nodes) == 0 {
 		return nil, errors.New("no nodes could be fetched from URL")
 	}
 	c := make(chan *ToxNode)
-	for _, node := range *nodes {
+	for _, node := range nodes {
 		// concurrently do this because it locks.
 		go func(node ToxNode) {
 			if IsAlive(&node, timeout) {
@@ -72,7 +72,7 @@ func FetchFirstAlive(timeout time.Duration) (*ToxNode, error) {
 /*
 FetchAll the possible bootstrap nodes from the wiki. Requires active internet!
 */
-func FetchAll() (*[]ToxNode, error) {
+func FetchAll() ([]ToxNode, error) {
 	response, err := http.Get(toxWikiNodesURL)
 	if err != nil {
 		return nil, err
@@ -136,24 +136,24 @@ func FetchAll() (*[]ToxNode, error) {
 		nodes = append(nodes, object)
 	}
 	// return full list
-	return &nodes, nil
+	return nodes, nil
 }
 
 /*
 FetchUp returns all nodes that are marked as being online in the wiki.
 */
-func FetchUp() (*[]ToxNode, error) {
+func FetchUp() ([]ToxNode, error) {
 	nodes, err := FetchAll()
 	if err != nil {
 		return nil, err
 	}
 	var upNodes []ToxNode
-	for _, node := range *nodes {
+	for _, node := range nodes {
 		if node.Status {
 			upNodes = append(upNodes, node)
 		}
 	}
-	return &upNodes, nil
+	return upNodes, nil
 }
 
 /*
@@ -165,10 +165,10 @@ func FetchAny() (*ToxNode, error) {
 		return nil, err
 	}
 	// shortcut
-	if len(*nodesTemp) == 0 {
+	if len(nodesTemp) == 0 {
 		return nil, nil
 	}
-	nodes := *nodesTemp
+	nodes := nodesTemp
 	// random seed based on time (doesn't need to be cryptographically secure)
 	rand.Seed(time.Now().UnixNano())
 	// pick one random
@@ -181,14 +181,14 @@ FetchAlive fetches all nodes from the wiki and then checks whether they are acti
 reachable and only returns those. Note that this means that this function will block for
 the specified time!
 */
-func FetchAlive(timeout time.Duration) (*[]ToxNode, error) {
+func FetchAlive(timeout time.Duration) ([]ToxNode, error) {
 	// we'll only check those marked as active
 	nodes, err := FetchUp()
 	if err != nil {
 		return nil, err
 	}
 	c := make(chan *ToxNode)
-	for _, node := range *nodes {
+	for _, node := range nodes {
 		// concurrently do this because it locks.
 		go func(node ToxNode) {
 			if IsAlive(&node, timeout) {
@@ -200,14 +200,14 @@ func FetchAlive(timeout time.Duration) (*[]ToxNode, error) {
 		// warning: don't use node directly in the anonymous function because it changes on every iteration!
 	}
 	var aliveNodes []ToxNode
-	for i := 0; i < len(*nodes); i++ {
+	for i := 0; i < len(nodes); i++ {
 		candidate := <-c
 		if candidate != nil {
 			aliveNodes = append(aliveNodes, *candidate)
 		}
 	}
 	// log.Printf("Of %2d nodes %2d are alive.", len(*nodes), len(aliveNodes))
-	return &aliveNodes, nil
+	return aliveNodes, nil
 }
 
 /*
@@ -221,10 +221,10 @@ func FetchAnyAlive(timeout time.Duration) (*ToxNode, error) {
 		return nil, err
 	}
 	// shortcut
-	if len(*nodesTemp) == 0 {
+	if len(nodesTemp) == 0 {
 		return nil, nil
 	}
-	nodes := *nodesTemp
+	nodes := nodesTemp
 	// random seed based on time (doesn't need to be cryptographically secure)
 	rand.Seed(time.Now().UnixNano())
 	// pick one random
