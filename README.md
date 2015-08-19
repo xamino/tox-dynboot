@@ -1,4 +1,5 @@
 # tox-dynboot
+
 Go package that fetches the bootstrap nodes from the [Tox wiki](https://wiki.tox.im/Nodes) to use with a Golang wrapped Toxcore.
 Import as shown:
 
@@ -7,12 +8,14 @@ import "github.com/xamino/tox-dynboot"
 ```
 
 ## Usage
-The basic case is that we want any single working node.
-The following function returns either the fastest responding ToxNode or an error.
+
+The basic case is that we want multiple working nodes to bootstrap a Tox client with.
+The following function returns any ToxNodes that respond within the given time or an error.
 To avoid locking up a program indefinitely a timeout must be given which will trigger an error if reached.
+The []ToxNode can then be used to bootstrap the Tox implementation.
 
 ```go
-toxNode, err := toxdynboot.FetchFirstAlive(100 * time.Millisecond)
+toxNodes, err := toxdynboot.FetchAlive(100 * time.Millisecond)
 ```
 
 Beyond that further methods are provided.
