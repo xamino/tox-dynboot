@@ -1,7 +1,7 @@
 /*
 Package toxdynboot requests the Node list from the Tox wiki and provides helpful
-functionality for them. Fastest and best way to use this package is via the
-FetchFirstAlive() function.
+functionality for them. Probable way to use this package is via the FetchAnyAlive()
+function.
 */
 package toxdynboot
 
@@ -37,42 +37,10 @@ func (t *ToxNode) String() string {
 }
 
 /*
-FetchFirstAlive will return the first node that we determine to be available. The timeout
-is the max time: if reached the function will return an error.
+ParseNodes reads the possible bootstrap nodes from the wiki. Requires active internet!
 */
-func FetchFirstAlive(timeout time.Duration) (*ToxNode, error) {
-	// we'll only check those marked as active
-	nodes, err := FetchUp()
-	if err != nil {
-		return nil, err
-	}
-	// prevent freezing if no nodes were fetched
-	if len(nodes) == 0 {
-		return nil, errors.New("no nodes could be fetched from URL")
-	}
-	c := make(chan *ToxNode)
-	for _, node := range nodes {
-		// concurrently do this because it locks.
-		go func(node ToxNode) {
-			if IsAlive(&node, timeout) {
-				c <- &node
-			} else {
-				c <- nil
-			}
-		}(node)
-		// warning: don't use node directly in the anonymous function because it changes on every iteration!
-	}
-	candidate := <-c
-	if candidate != nil {
-		return candidate, nil
-	}
-	return nil, errors.New("No ToxNode could be reached!")
-}
-
-/*
-FetchAll the possible bootstrap nodes from the wiki. Requires active internet!
-*/
-func FetchAll() ([]ToxNode, error) {
+func ParseNodes() ([]ToxNode, error) {
+	// TODO: this can block for a long time – implement timeout?
 	response, err := http.Get(toxWikiNodesURL)
 	if err != nil {
 		return nil, err
@@ -143,7 +111,7 @@ func FetchAll() ([]ToxNode, error) {
 FetchUp returns all nodes that are marked as being online in the wiki.
 */
 func FetchUp() ([]ToxNode, error) {
-	nodes, err := FetchAll()
+	nodes, err := ParseNodes()
 	if err != nil {
 		return nil, err
 	}
@@ -212,7 +180,8 @@ func FetchAlive(timeout time.Duration) ([]ToxNode, error) {
 
 /*
 FetchAnyAlive will retrive a random node of those that have been determined to be alive
-within the given timeout.
+within the given timeout. This is the method you should probably use to bootstrap
+a client with multiple Tox nodes.
 */
 func FetchAnyAlive(timeout time.Duration) (*ToxNode, error) {
 	nodesTemp, err := FetchAlive(timeout)
@@ -229,6 +198,39 @@ func FetchAnyAlive(timeout time.Duration) (*ToxNode, error) {
 	// pick one random
 	node := nodes[rand.Intn(len(nodes))]
 	return &node, nil
+}
+
+/*
+FetchFirstAlive will return the first node that we determine to be available. The timeout
+is the max time: if reached the function will return an error.
+*/
+func FetchFirstAlive(timeout time.Duration) (*ToxNode, error) {
+	// we'll only check those marked as active
+	nodes, err := FetchUp()
+	if err != nil {
+		return nil, err
+	}
+	// prevent freezing if no nodes were fetched
+	if len(nodes) == 0 {
+		return nil, errors.New("no nodes could be fetched from URL")
+	}
+	c := make(chan *ToxNode)
+	for _, node := range nodes {
+		// concurrently do this because it locks.
+		go func(node ToxNode) {
+			if IsAlive(&node, timeout) {
+				c <- &node
+			} else {
+				c <- nil
+			}
+		}(node)
+		// warning: don't use node directly in the anonymous function because it changes on every iteration!
+	}
+	candidate := <-c
+	if candidate != nil {
+		return candidate, nil
+	}
+	return nil, errors.New("No ToxNode could be reached!")
 }
 
 /*
