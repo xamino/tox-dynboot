@@ -212,8 +212,7 @@ func FetchAlive(timeout time.Duration) ([]ToxNode, error) {
 
 /*
 FetchAnyAlive will retrive a random node of those that have been determined to be alive
-within the given timeout. NOTE: Usually you should use FetchFirstAlive() instead of this
-function.
+within the given timeout.
 */
 func FetchAnyAlive(timeout time.Duration) (*ToxNode, error) {
 	nodesTemp, err := FetchAlive(timeout)
