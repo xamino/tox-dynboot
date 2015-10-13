@@ -1,6 +1,6 @@
 # tox-dynboot
 
-Go package that fetches the bootstrap nodes from the [Tox wiki](https://wiki.tox.im/Nodes) to use with a Golang wrapped Toxcore.
+Go package that fetches the bootstrap nodes from the [Tox wiki](https://wiki.tox.chat/users/nodes) to use with a Golang wrapped Toxcore.
 Import as shown:
 
 ```go
