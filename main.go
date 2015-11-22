@@ -49,10 +49,13 @@ reachable and only returns those. Note that this means that this function will b
 the specified time!
 */
 func FetchAlive(timeout time.Duration) ([]ToxNode, error) {
-	// we'll only check those marked as active
 	nodes, err := parseNodes()
 	if err != nil {
 		return nil, err
+	}
+	// shortcut
+	if len(nodes) == 0 {
+		return nil, errNoToxNodes
 	}
 	c := make(chan *ToxNode)
 	for _, node := range nodes {
@@ -73,7 +76,6 @@ func FetchAlive(timeout time.Duration) ([]ToxNode, error) {
 			aliveNodes = append(aliveNodes, *candidate)
 		}
 	}
-	// log.Printf("Of %2d nodes %2d are alive.", len(*nodes), len(aliveNodes))
 	return aliveNodes, nil
 }
 
@@ -89,7 +91,7 @@ func FetchAnyAlive(timeout time.Duration) (*ToxNode, error) {
 	}
 	// shortcut
 	if len(nodesTemp) == 0 {
-		return nil, nil
+		return nil, errNoToxNodes
 	}
 	nodes := nodesTemp
 	// random seed based on time (doesn't need to be cryptographically secure)
@@ -111,7 +113,7 @@ func FetchFirstAlive(timeout time.Duration) (*ToxNode, error) {
 	}
 	// prevent freezing if no nodes were fetched
 	if len(nodes) == 0 {
-		return nil, nil
+		return nil, errNoToxNodes
 	}
 	c := make(chan *ToxNode)
 	for _, node := range nodes {
@@ -125,11 +127,13 @@ func FetchFirstAlive(timeout time.Duration) (*ToxNode, error) {
 		}(node)
 		// warning: don't use node directly in the anonymous function because it changes on every iteration!
 	}
+	// wait for the first one to respond and return it
 	candidate := <-c
+	// if nil returned the timeout has run out, so continue to errAliveTimeout
 	if candidate != nil {
 		return candidate, nil
 	}
-	return nil, nil
+	return nil, errAliveTimeout
 }
 
 /*

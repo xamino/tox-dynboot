@@ -8,6 +8,8 @@ Errors used.
 var (
 	errSourceFormat = errors.New("source can not be parsed")
 	errSourceTable  = errors.New("source table not parseable")
+	errAliveTimeout = errors.New("alive timed out")
+	errNoToxNodes   = errors.New("no ToxNodes could be fetched")
 )
 
 /*
