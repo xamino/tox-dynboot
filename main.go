@@ -7,7 +7,6 @@ package toxdynboot
 
 import (
 	"encoding/hex"
-	"errors"
 	"io/ioutil"
 	"math/rand"
 	"net"
@@ -17,118 +16,18 @@ import (
 	"time"
 )
 
-// toxWikiNodesURL is the address where we look for the node list.
-const toxWikiNodesURL = "https://wiki.tox.chat/users/nodes"
-
-// ToxNode is a single possible node candidate.
-type ToxNode struct {
-	IPv4      string
-	IPv6      string
-	Port      uint16
-	PublicKey []byte
-	// TODO: can I do anything with this too?
-	Locale string
-	Name   string
-	Status bool
-}
-
-func (t *ToxNode) String() string {
-	return "ToxNode " + t.Name + " at " + t.IPv4 + ":" + strconv.FormatInt(int64(t.Port), 10) + "."
-}
-
 /*
-ParseNodes reads the possible bootstrap nodes from the wiki. Requires active internet!
+FetchAll returns all nodes that are in the wiki.
 */
-func ParseNodes() ([]ToxNode, error) {
-	// TODO: this can block for a long time – implement timeout?
-	response, err := http.Get(toxWikiNodesURL)
-	if err != nil {
-		return nil, err
-	}
-	defer response.Body.Close()
-	contents, err := ioutil.ReadAll(response.Body)
-	if err != nil {
-		return nil, err
-	}
-	// locate only the table we are interested in
-	trimmed := strings.Split(string(contents), "id=\"active_nodes_list\"")[1]
-	trimmed = strings.Split(trimmed, "id=\"running_a_node\"")[0]
-	// remove stuff before first <td> and split rest up
-	candidates := strings.Split(trimmed, "<td")[1:]
-	// if we have no candidates we're done, probabaly formatting error
-	if len(candidates) == 0 {
-		return nil, errors.New("parsing of wiki table failed")
-	}
-	var list []string
-	for _, element := range candidates {
-		// clean up leading stuff
-		element = strings.Split(element, ">")[1]
-		// clean up anything outside the </td>
-		element = strings.Split(element, "</td")[0]
-		// remove whitespace
-		element = strings.TrimSpace(element)
-		// remove any trailing newlines
-		element = strings.Trim(element, "\n")
-		// now each element is a single value
-		list = append(list, element)
-	}
-	// if this changes the parsing won't work anyway, so warn and quit here
-	if len(list)%7 != 0 {
-		return nil, errors.New("Table is not formatted correctly, contact code maintainer of toxdynboot!")
-	}
-	// determine how many iterations we'll have to do
-	amount := len(list) / 7
-	// list of objects
-	var nodes []ToxNode
-	// now build ToxNodes from the elements
-	for i := 0; i < amount; i++ {
-		index := i * 7
-		// most we can directly assign
-		object := ToxNode{IPv4: list[index], IPv6: list[index+1], Locale: list[index+5], Name: list[index+4]}
-		// port needs to converted first
-		temp, err := strconv.ParseInt(list[index+2], 10, 32)
-		if err != nil {
-			// This means either we've made a mistake or the table is badly formatted
-			return nil, err
-		}
-		// needs to be cast to correct value too
-		object.Port = uint16(temp)
-		// key needs to be dehexed
-		object.PublicKey, err = hex.DecodeString(list[index+3])
-		if err != nil {
-			return nil, err
-		}
-		// status should be set
-		object.Status = strings.Contains(list[index+6], "UP")
-		// and done
-		nodes = append(nodes, object)
-	}
-	// return full list
-	return nodes, nil
+func FetchAll() ([]ToxNode, error) {
+	return parseNodes()
 }
 
 /*
-FetchUp returns all nodes that are marked as being online in the wiki.
-*/
-func FetchUp() ([]ToxNode, error) {
-	nodes, err := ParseNodes()
-	if err != nil {
-		return nil, err
-	}
-	var upNodes []ToxNode
-	for _, node := range nodes {
-		if node.Status {
-			upNodes = append(upNodes, node)
-		}
-	}
-	return upNodes, nil
-}
-
-/*
-FetchAny returns a random single node with the status of UP from the wiki.
+FetchAny returns a random single node from the wiki.
 */
 func FetchAny() (*ToxNode, error) {
-	nodesTemp, err := FetchUp()
+	nodesTemp, err := parseNodes()
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +50,7 @@ the specified time!
 */
 func FetchAlive(timeout time.Duration) ([]ToxNode, error) {
 	// we'll only check those marked as active
-	nodes, err := FetchUp()
+	nodes, err := parseNodes()
 	if err != nil {
 		return nil, err
 	}
@@ -159,7 +58,7 @@ func FetchAlive(timeout time.Duration) ([]ToxNode, error) {
 	for _, node := range nodes {
 		// concurrently do this because it locks.
 		go func(node ToxNode) {
-			if IsAlive(&node, timeout) {
+			if isAlive(&node, timeout) {
 				c <- &node
 			} else {
 				c <- nil
@@ -206,19 +105,19 @@ is the max time: if reached the function will return an error.
 */
 func FetchFirstAlive(timeout time.Duration) (*ToxNode, error) {
 	// we'll only check those marked as active
-	nodes, err := FetchUp()
+	nodes, err := parseNodes()
 	if err != nil {
 		return nil, err
 	}
 	// prevent freezing if no nodes were fetched
 	if len(nodes) == 0 {
-		return nil, errors.New("no nodes could be fetched from URL")
+		return nil, nil
 	}
 	c := make(chan *ToxNode)
 	for _, node := range nodes {
 		// concurrently do this because it locks.
 		go func(node ToxNode) {
-			if IsAlive(&node, timeout) {
+			if isAlive(&node, timeout) {
 				c <- &node
 			} else {
 				c <- nil
@@ -230,7 +129,84 @@ func FetchFirstAlive(timeout time.Duration) (*ToxNode, error) {
 	if candidate != nil {
 		return candidate, nil
 	}
-	return nil, errors.New("No ToxNode could be reached!")
+	return nil, nil
+}
+
+/*
+parseNodes reads the possible bootstrap nodes from the wiki. Requires active internet!
+*/
+func parseNodes() ([]ToxNode, error) {
+	// TODO: this can block for a long time – implement timeout?
+	response, err := http.Get(toxWikiNodesURL)
+	if err != nil {
+		return nil, err
+	}
+	defer response.Body.Close()
+	contents, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		return nil, err
+	}
+	strContents := string(contents)
+	// check if we can locate the source text with the table
+	if !strings.Contains(strContents, "|") {
+		return nil, errSourceFormat
+	}
+	// so long as only a single table is on that wiki page, this split will
+	// return all entry candidates
+	splitted := strings.Split(strContents, "|")
+	// if we have no candidates we're done, probabaly formatting error
+	if len(splitted) == 0 {
+		return nil, errSourceFormat
+	}
+	// throw away first entry (contain start of webpage)
+	splitted = splitted[1 : len(splitted)-2] // TODO note -2: why?
+	// remove empty elements
+	var list []string
+	for _, cand := range splitted {
+		// trim space
+		cand = strings.TrimSpace(cand)
+		// if trim results in empty candidate, throw away (can be line break)
+		if cand == "" {
+			continue
+		}
+		// append remaining
+		list = append(list, cand)
+	}
+	// if this changes the parsing won't work anyway, so warn and quit here
+	if len(list)%tableColumns != 0 {
+		return nil, errSourceTable
+	}
+	// determine how many iterations we'll have to do
+	amount := len(list) / tableColumns
+	// list of objects
+	var nodes []ToxNode
+	// now build ToxNodes from the elements
+	for i := 0; i < amount; i++ {
+		index := i * tableColumns
+		// most we can directly assign
+		object := ToxNode{
+			IPv4:       list[index+columnIP4],
+			IPv6:       list[index+columnIP6],
+			Maintainer: list[index+columnMaintainer],
+			Location:   list[index+columnLocation]}
+		// port needs to converted first
+		temp, err := strconv.ParseInt(list[index+columnPort], 10, 32)
+		if err != nil {
+			// This means either we've made a mistake or the table is badly formatted
+			return nil, err
+		}
+		// needs to be cast to correct value too
+		object.Port = uint16(temp)
+		// key needs to be dehexed
+		object.PublicKey, err = hex.DecodeString(list[index+columnKey])
+		if err != nil {
+			return nil, err
+		}
+		// and done
+		nodes = append(nodes, object)
+	}
+	// return full list
+	return nodes, nil
 }
 
 /*
@@ -239,7 +215,7 @@ connections - if they are online but quietly discard connection attempts, this f
 will wrongly label them as unreachable (which is the case for a few of the current nodes
 as of 2015.06.10).
 */
-func IsAlive(node *ToxNode, timeout time.Duration) bool {
+func isAlive(node *ToxNode, timeout time.Duration) bool {
 	// TODO: use both IPv4 AND IPv6.
 	address := node.IPv4 + ":" + strconv.FormatUint(uint64(node.Port), 10)
 	// since ICMP ping is not trivially available we rely on the servers denying TCP connections as a ping
